@@ -4,7 +4,7 @@ from skimage.feature import hog
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
-from kerastuner.tuners import RandomSearch
+from keras_tuner.tuners import RandomSearch
 import time
 
 
@@ -77,7 +77,7 @@ tuner = RandomSearch(build_model, objective='val_accuracy', max_trials=5, execut
                      project_name='facial_recognition')
 
 # Realizar a busca de hiperparâmetros
-tuner.search(hog_features, labels, epochs=20)
+tuner.search(hog_features, epochs=2, validation_split=0.3)
 
 # Obter o melhor modelo
 best_model = tuner.get_best_models(num_models=1)[0]
