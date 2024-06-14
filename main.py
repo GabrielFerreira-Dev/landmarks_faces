@@ -6,10 +6,17 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from keras_tuner.tuners import RandomSearch
 import time
+from sklearn.model_selection import train_test_split
+import mediapipe as mp
 
 
 # Função para capturar vídeo da webcam por 10 segundos
 def capture_video_from_webcam(duration=10, fps=30):
+    mpDraw = mp.solutions.drawing_utils
+    mpFaceMesh = mp.solutions.face_mesh
+    faceMesh = mpFaceMesh.FaceMesh(max_num_faces=2)
+    drawSpec = mpDraw.DrawingSpec(thickness=1, circle_radius=2)
+
     cap = cv2.VideoCapture(0)
     frames = []
     start_time = time.time()
@@ -19,7 +26,14 @@ def capture_video_from_webcam(duration=10, fps=30):
             break
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frames.append(gray_frame)
-        cv2.imshow('frame', gray_frame)
+
+        # FaceMesh processing
+        imgRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = faceMesh.process(imgRGB)
+        if results.multi_face_landmarks:
+            for faceLms in results.multi_face_landmarks:
+                mpDraw.draw_landmarks(frame, faceLms, mpFaceMesh.FACEMESH_TESSELATION, drawSpec, drawSpec)
+        cv2.imshow('frame', frame)
         if cv2.waitKey(int(1000 / fps)) & 0xFF == ord('q'):
             break
     cap.release()
@@ -44,6 +58,8 @@ def extract_hog_features(images):
 hog_features = extract_hog_features(frames)
 labels = np.zeros(len(hog_features))  # Rótulo genérico, ajustável conforme necessidade
 
+X_train, X_val, y_train, y_val = train_test_split(hog_features, labels, test_size= 0.2, random_state= 42)
+
 # Configurar a rede neural
 model = Sequential([
     Dense(128, activation='relu', input_shape=(hog_features.shape[1],)),
@@ -54,7 +70,7 @@ model = Sequential([
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # Treinar a rede neural
-model.fit(hog_features, labels, epochs=20, batch_size=1, validation_split=0.0)
+model.fit(hog_features, labels, epochs=5, batch_size=1, validation_split=0.0)
 
 
 # Função para construir o modelo com hiperparametrização
@@ -77,10 +93,10 @@ tuner = RandomSearch(build_model, objective='val_accuracy', max_trials=5, execut
                      project_name='facial_recognition')
 
 # Realizar a busca de hiperparâmetros
-tuner.search(hog_features, epochs=2, validation_split=0.3)
+tuner.search(X_train, y_train, epochs=5, validation_data= (X_val, y_val))
 
 # Obter o melhor modelo
 best_model = tuner.get_best_models(num_models=1)[0]
 
 # Salvar o modelo treinado
-best_model.save('face_recognition_model.h5')
+best_model.save('face_recognition_model.keras')
